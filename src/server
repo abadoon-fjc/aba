@@ -1,0 +1,185 @@
+const express = require('express');
+const cors = require('cors');
+const admin = require('firebase-admin');
+const schedule = require('node-schedule');
+
+const serviceAccount = require('./aba-coin-firebase-adminsdk-t5d7s-a7654e53fb.json');
+
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+
+const db = admin.firestore();
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+
+app.use(cors());
+app.use(express.json());
+
+
+schedule.scheduleJob('0 0 * * *', async () => {
+  try {
+    const usersSnapshot = await db.collection('users').get();
+    const batch = db.batch();
+
+    usersSnapshot.forEach((doc) => {
+      const userRef = db.collection('users').doc(doc.id);
+      batch.update(userRef, { todayAmount: 0 }); // Обнуляем todayAmount
+    });
+
+    await batch.commit();
+    console.log('Счётчики обнулены в 00:00 по UTC');
+  } catch (error) {
+    console.error('Ошибка при обнулении счётчиков:', error);
+  }
+});
+
+
+app.get('/counter/:username', async (req, res) => {
+  const { username } = req.params;
+  try {
+    const userRef = db.collection('users').doc(username);
+    const doc = await userRef.get();
+    if (doc.exists) {
+      res.json({ counter: doc.data().counter || 0 });
+    } else {
+      res.json({ counter: 0 });
+    }
+  } catch (error) {
+    console.error('Error fetching counter:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
+app.get('/daily-clicks/:username', async (req, res) => {
+  const { username } = req.params;
+  try {
+    const userRef = db.collection('users').doc(username);
+    const doc = await userRef.get();
+    if (doc.exists) {
+      res.json({ dailyClicks: doc.data().todayAmount || 0 });
+    } else {
+      res.json({ dailyClicks: 0 });
+    }
+  } catch (error) {
+    console.error('Error fetching daily clicks:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
+app.get('/total-clicks/:username', async (req, res) => {
+  const { username } = req.params;
+  try {
+    const userRef = db.collection('users').doc(username);
+    const doc = await userRef.get();
+    if (doc.exists) {
+      res.json({ totalClicks: doc.data().totalAmount || 0 });
+    } else {
+      res.json({ totalClicks: 0 });
+    }
+  } catch (error) {
+    console.error('Error fetching total clicks:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
+app.get('/wallet-address/:username', async (req, res) => {
+  const { username } = req.params;
+  try {
+    const userRef = db.collection('users').doc(username);
+    const doc = await userRef.get();
+    if (doc.exists) {
+      res.json({ walletAddress: doc.data().walletAddress || '' });
+    } else {
+      res.json({ walletAddress: '' });
+    }
+  } catch (error) {
+    console.error('Error fetching wallet address:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
+
+app.post('/update-wallet-data', async (req, res) => {
+  const { username, wallet, walletAddress } = req.body;
+
+  if (!username || !wallet || !walletAddress) {
+    return res.status(400).json({ message: 'Invalid data' });
+  }
+
+  try {
+    const userRef = db.collection('users').doc(username);
+    await userRef.set({ wallet, walletAddress }, { merge: true });
+    res.json({ message: 'Wallet data updated successfully' });
+  } catch (error) {
+    console.error('Error updating wallet data:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
+app.post('/update-daily-clicks', async (req, res) => {
+  const { username, dailyClicks } = req.body;
+
+  if (!username || typeof dailyClicks === 'undefined') {
+    return res.status(400).json({ message: 'Invalid data' });
+  }
+
+  try {
+    const userRef = db.collection('users').doc(username);
+    await userRef.set({ todayAmount: dailyClicks }, { merge: true });
+    res.json({ message: 'Daily clicks updated successfully' });
+  } catch (error) {
+    console.error('Error updating daily clicks:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
+app.post('/update-total-clicks', async (req, res) => {
+  const { username, totalClicks } = req.body;
+
+  if (!username || typeof totalClicks === 'undefined') {
+    return res.status(400).json({ message: 'Invalid data' });
+  }
+
+  try {
+    const userRef = db.collection('users').doc(username);
+    await userRef.set({ totalAmount: totalClicks }, { merge: true });
+    res.json({ message: 'Total clicks updated successfully' });
+  } catch (error) {
+    console.error('Error updating total clicks:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
+app.post('/update', async (req, res) => {
+  const { username, counter } = req.body;
+
+  if (!username || typeof counter === 'undefined') {
+    return res.status(400).json({ message: 'Invalid data' });
+  }
+
+  try {
+    const userRef = db.collection('users').doc(username);
+    await userRef.set({ counter }, { merge: true });
+    res.json({ message: 'Counter updated successfully' });
+  } catch (error) {
+    console.error('Error updating counter:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
+app.listen(port, () => {
+  console.log(`Server running on https://bony-dot-timer.glitch.me`);
+});
